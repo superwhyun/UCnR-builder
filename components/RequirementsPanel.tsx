@@ -8,12 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Sparkles, Check, Filter } from 'lucide-react';
+import { Loader2, Sparkles, Check, Filter, Trash2 } from 'lucide-react';
 
 interface RequirementsPanelProps {
   useCase: UseCase;
   onGenerateRequirements: (prompt: string) => Promise<void>;
   onToggleRequirement: (reqId: string) => void;
+  onDeleteRequirement: (reqId: string) => void;
   isGenerating?: boolean;
 }
 
@@ -21,6 +22,7 @@ export function RequirementsPanel({
   useCase, 
   onGenerateRequirements, 
   onToggleRequirement,
+  onDeleteRequirement,
   isGenerating = false 
 }: RequirementsPanelProps) {
   const [prompt, setPrompt] = useState('');
@@ -126,16 +128,31 @@ export function RequirementsPanel({
                   <Checkbox 
                     checked={req.selected} 
                     className="mt-0.5"
+                    onClick={(e) => e.stopPropagation()}
                     onCheckedChange={() => onToggleRequirement(req.id)}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {req.type === 'functional' ? '기능' : '비기능'}
-                      </Badge>
-                      <Badge variant="outline" className={`text-xs ${getPriorityColor(req.priority)}`}>
-                        {req.priority === 'high' ? '높음' : req.priority === 'medium' ? '중간' : '낮음'}
-                      </Badge>
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {req.type === 'functional' ? '기능' : '비기능'}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${getPriorityColor(req.priority)}`}>
+                          {req.priority === 'high' ? '높음' : req.priority === 'medium' ? '중간' : '낮음'}
+                        </Badge>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteRequirement(req.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                     <p className={`text-sm ${req.selected ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {req.description}

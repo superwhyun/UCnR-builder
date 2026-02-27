@@ -1,6 +1,7 @@
 export interface Step {
   order: number;
   actor: string;
+  target?: string;
   action: string;
   result?: string;
 }

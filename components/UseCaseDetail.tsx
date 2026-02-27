@@ -1,17 +1,37 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { UseCase } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import { MermaidDiagram } from './MermaidDiagram';
 import { Users, ArrowRight, Check } from 'lucide-react';
 
 interface UseCaseDetailProps {
   useCase: UseCase;
+  onMermaidDiagramChange?: (diagram: string) => void;
+  onRegenerateMermaidDiagram?: () => void;
 }
 
-export function UseCaseDetail({ useCase }: UseCaseDetailProps) {
+export function UseCaseDetail({
+  useCase,
+  onMermaidDiagramChange,
+  onRegenerateMermaidDiagram,
+}: UseCaseDetailProps) {
+  const [diagramDraft, setDiagramDraft] = useState(useCase.mermaidDiagram);
+
+  useEffect(() => {
+    setDiagramDraft(useCase.mermaidDiagram);
+  }, [useCase.id, useCase.mermaidDiagram]);
+
+  const handleChangeDiagram = (value: string) => {
+    setDiagramDraft(value);
+    onMermaidDiagramChange?.(value);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -58,6 +78,14 @@ export function UseCaseDetail({ useCase }: UseCaseDetailProps) {
                       {step.actor}
                     </Badge>
                     <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                    {step.target && (
+                      <>
+                        <Badge variant="secondary" className="text-xs font-normal">
+                          {step.target}
+                        </Badge>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      </>
+                    )}
                     <span className="font-medium">{step.action}</span>
                   </div>
                   {step.result && (
@@ -76,10 +104,25 @@ export function UseCaseDetail({ useCase }: UseCaseDetailProps) {
 
       {/* UML Diagram */}
       <div>
-        <h3 className="text-sm font-medium mb-4 uppercase tracking-wide text-muted-foreground">
-          시퀀스 다이어그램
-        </h3>
-        <MermaidDiagram chart={useCase.mermaidDiagram} />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            시퀀스 다이어그램
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRegenerateMermaidDiagram}
+          >
+            흐름 기준 재생성
+          </Button>
+        </div>
+        <Textarea
+          value={diagramDraft}
+          onChange={(e) => handleChangeDiagram(e.target.value)}
+          className="min-h-44 font-mono text-xs resize-y mb-3"
+          placeholder="Mermaid 시퀀스 다이어그램 코드를 직접 수정하세요."
+        />
+        <MermaidDiagram chart={diagramDraft} />
       </div>
     </div>
   );

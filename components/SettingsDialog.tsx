@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, loadSettings, saveSettings } from '@/lib/settings';
+import { Settings, getDefaultSettings, loadSettings, restoreDefaultSettings, saveSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState<Settings>({ openaiApiKey: '', model: 'gpt-5.2' });
+  const [settings, setSettings] = useState<Settings>(getDefaultSettings());
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -57,6 +58,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     }, 500);
   };
 
+  const handleRestoreDefaults = () => {
+    const defaults = restoreDefaultSettings();
+    setSettings(defaults);
+    setSaved(false);
+    onSettingsChange?.(defaults);
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -64,7 +72,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <Settings2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-[84rem]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="h-5 w-5" />
@@ -125,9 +133,40 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="usecase-system-prompt">유즈케이스 시스템 프롬프트</Label>
+            <Textarea
+              id="usecase-system-prompt"
+              value={settings.useCaseSystemPrompt}
+              onChange={(e) => setSettings({ ...settings, useCaseSystemPrompt: e.target.value })}
+              placeholder="유즈케이스 생성 시 먼저 적용할 시스템 지시사항을 입력하세요."
+              className="min-h-24 resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              유즈케이스 생성 요청 시 사용자 입력보다 먼저 시스템 지시로 적용됩니다.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="requirements-system-prompt">요구사항 시스템 프롬프트</Label>
+            <Textarea
+              id="requirements-system-prompt"
+              value={settings.requirementsSystemPrompt}
+              onChange={(e) => setSettings({ ...settings, requirementsSystemPrompt: e.target.value })}
+              placeholder="요구사항 생성 시 먼저 적용할 시스템 지시사항을 입력하세요."
+              className="min-h-24 resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              요구사항 생성 요청 시 사용자 입력보다 먼저 시스템 지시로 적용됩니다.
+            </p>
+          </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <Button variant="outline" onClick={handleRestoreDefaults}>
+            기본값 복원
+          </Button>
           <Button onClick={handleSave} disabled={!settings.openaiApiKey.trim()}>
             {saved ? (
               <>

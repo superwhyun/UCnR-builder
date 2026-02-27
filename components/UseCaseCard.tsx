@@ -3,15 +3,17 @@
 import { UseCase } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Users, ListOrdered } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ChevronRight, Users, ListOrdered, Trash2 } from 'lucide-react';
 
 interface UseCaseCardProps {
   useCase: UseCase;
   isSelected?: boolean;
   onClick?: () => void;
+  onDelete?: () => void;
 }
 
-export function UseCaseCard({ useCase, isSelected = false, onClick }: UseCaseCardProps) {
+export function UseCaseCard({ useCase, isSelected = false, onClick, onDelete }: UseCaseCardProps) {
   return (
     <Card
       onClick={onClick}
@@ -36,9 +38,23 @@ export function UseCaseCard({ useCase, isSelected = false, onClick }: UseCaseCar
             {useCase.description}
           </p>
         </div>
-        <ChevronRight className={`h-4 w-4 shrink-0 mt-0.5 ${
-          isSelected ? 'text-primary-foreground/50' : 'text-muted-foreground'
-        }`} />
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={`h-6 w-6 ${isSelected ? 'text-primary-foreground/70 hover:text-primary-foreground' : 'text-muted-foreground hover:text-destructive'}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <ChevronRight className={`h-4 w-4 ${
+            isSelected ? 'text-primary-foreground/50' : 'text-muted-foreground'
+          }`} />
+        </div>
       </div>
 
       <div className="flex items-center gap-4 mt-3">

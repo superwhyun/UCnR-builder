@@ -12,12 +12,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Layers, FileText, Check, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { Settings, loadSettings } from '@/lib/settings';
-import { generateUseCaseFromPrompt, generateRequirements } from '@/lib/openai';
+import { Settings, getDefaultSettings, loadSettings } from '@/lib/settings';
+import { generateMermaidDiagram, generateUseCaseFromPrompt, generateRequirements } from '@/lib/openai';
 import {
   Alert,
   AlertDescription,
 } from '@/components/ui/alert';
+
+const APP_STATE_KEY = 'usecase-builder-app-state';
+
+interface PersistedState {
+  useCases: Array<Omit<UseCase, 'createdAt'> & { createdAt: string }>;
+  selectedUseCaseId: string | null;
+  messages: Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
+  view: 'chat' | 'detail';
+}
 
 export default function Home() {
   const [useCases, setUseCases] = useState<UseCase[]>([]);
@@ -26,12 +35,57 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingReqs, setIsGeneratingReqs] = useState(false);
   const [view, setView] = useState<'chat' | 'detail'>('chat');
-  const [settings, setSettings] = useState<Settings>({ openaiApiKey: '', model: 'gpt-5.2' });
+  const [settings, setSettings] = useState<Settings>(getDefaultSettings());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setSettings(loadSettings());
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(APP_STATE_KEY);
+      if (!stored) return;
+
+      const parsed = JSON.parse(stored) as PersistedState;
+      const restoredUseCases: UseCase[] = (parsed.useCases || []).map((useCase) => ({
+        ...useCase,
+        createdAt: new Date(useCase.createdAt),
+      }));
+      const restoredMessages: Message[] = (parsed.messages || []).map((message) => ({
+        ...message,
+        timestamp: new Date(message.timestamp),
+      }));
+      const selectedIdExists = restoredUseCases.some((useCase) => useCase.id === parsed.selectedUseCaseId);
+
+      setUseCases(restoredUseCases);
+      setMessages(restoredMessages);
+      setSelectedUseCaseId(selectedIdExists ? parsed.selectedUseCaseId : null);
+      setView(selectedIdExists && parsed.view === 'detail' ? 'detail' : 'chat');
+    } catch (e) {
+      console.error('Failed to restore app state:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stateToSave: PersistedState = {
+        useCases: useCases.map((useCase) => ({
+          ...useCase,
+          createdAt: useCase.createdAt.toISOString(),
+        })),
+        selectedUseCaseId,
+        messages: messages.map((message) => ({
+          ...message,
+          timestamp: message.timestamp.toISOString(),
+        })),
+        view,
+      };
+      localStorage.setItem(APP_STATE_KEY, JSON.stringify(stateToSave));
+    } catch (e) {
+      console.error('Failed to save app state:', e);
+    }
+  }, [useCases, selectedUseCaseId, messages, view]);
 
   const selectedUseCase = useCases.find(uc => uc.id === selectedUseCaseId);
 
@@ -111,6 +165,18 @@ export default function Home() {
     }));
   };
 
+  const handleDeleteRequirement = (reqId: string) => {
+    setUseCases(prev => prev.map(uc => {
+      if (uc.id === selectedUseCaseId) {
+        return {
+          ...uc,
+          requirements: uc.requirements.filter(req => req.id !== reqId)
+        };
+      }
+      return uc;
+    }));
+  };
+
   const handleNewUseCase = () => {
     setSelectedUseCaseId(null);
     setView('chat');
@@ -120,6 +186,29 @@ export default function Home() {
   const handleSettingsChange = (newSettings: Settings) => {
     setSettings(newSettings);
     setError(null);
+  };
+
+  const handleDeleteUseCase = (useCaseId: string) => {
+    setUseCases(prev => prev.filter(uc => uc.id !== useCaseId));
+    if (selectedUseCaseId === useCaseId) {
+      setSelectedUseCaseId(null);
+      setView('chat');
+      setError(null);
+    }
+  };
+
+  const handleUpdateMermaidDiagram = (diagram: string) => {
+    if (!selectedUseCaseId) return;
+    setUseCases(prev => prev.map(uc =>
+      uc.id === selectedUseCaseId ? { ...uc, mermaidDiagram: diagram } : uc
+    ));
+  };
+
+  const handleRegenerateMermaidDiagram = () => {
+    if (!selectedUseCaseId) return;
+    setUseCases(prev => prev.map(uc =>
+      uc.id === selectedUseCaseId ? { ...uc, mermaidDiagram: generateMermaidDiagram(uc) } : uc
+    ));
   };
 
   const totalRequirements = useCases.reduce((sum, uc) => sum + uc.requirements.filter(r => r.selected).length, 0);
@@ -180,8 +269,8 @@ export default function Home() {
         </div>
 
         {/* UseCase List */}
-        <ScrollArea className="flex-1 px-4">
-          <div className="space-y-2 pb-4">
+        <div className="flex-1 overflow-y-auto overflow-x-visible">
+          <div className="space-y-2 px-4 pb-4 pr-6">
             {useCases.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-xs text-muted-foreground">
@@ -194,6 +283,7 @@ export default function Home() {
                   key={useCase.id}
                   useCase={useCase}
                   isSelected={selectedUseCaseId === useCase.id}
+                  onDelete={() => handleDeleteUseCase(useCase.id)}
                   onClick={() => {
                     setSelectedUseCaseId(useCase.id);
                     setView('detail');
@@ -203,7 +293,7 @@ export default function Home() {
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -243,7 +333,11 @@ export default function Home() {
               </div>
               <ScrollArea className="h-[calc(100vh-65px)]">
                 <div className="p-6 max-w-3xl">
-                  <UseCaseDetail useCase={selectedUseCase} />
+                  <UseCaseDetail
+                    useCase={selectedUseCase}
+                    onMermaidDiagramChange={handleUpdateMermaidDiagram}
+                    onRegenerateMermaidDiagram={handleRegenerateMermaidDiagram}
+                  />
                 </div>
               </ScrollArea>
             </div>
@@ -259,6 +353,7 @@ export default function Home() {
                     useCase={selectedUseCase}
                     onGenerateRequirements={handleGenerateRequirements}
                     onToggleRequirement={handleToggleRequirement}
+                    onDeleteRequirement={handleDeleteRequirement}
                     isGenerating={isGeneratingReqs}
                   />
                 </div>
