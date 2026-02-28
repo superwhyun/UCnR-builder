@@ -67,6 +67,7 @@ export default function Home() {
       const parsed = JSON.parse(stored) as PersistedState;
       const restoredUseCases: UseCase[] = (parsed.useCases || []).map((useCase) => ({
         ...useCase,
+        d2Diagram: useCase.d2Diagram || (useCase as any).mermaidDiagram || '',
         assumptions: useCase.assumptions || [],
         actors: Array.isArray(useCase.actors)
           ? useCase.actors.map((actor: any) =>
@@ -267,9 +268,9 @@ ${actorsMd}
 | --- | --- | --- | --- | --- |
 ${flowMd}
 
-## Sequence Diagram (Mermaid)
-\`\`\`mermaid
-${useCase.mermaidDiagram || 'sequenceDiagram\n  %% not generated yet'}
+## Sequence Diagram (D2)
+\`\`\`d2
+${useCase.d2Diagram || 'direction: down\n  # not generated yet'}
 \`\`\`
 
 ## Requirements
@@ -287,10 +288,10 @@ ${requirementsMd}
     URL.revokeObjectURL(url);
   };
 
-  const handleUpdateMermaidDiagram = (diagram: string) => {
+  const handleUpdateD2Diagram = (diagram: string) => {
     if (!selectedUseCaseId) return;
     setUseCases(prev => prev.map(uc =>
-      uc.id === selectedUseCaseId ? { ...uc, mermaidDiagram: diagram } : uc
+      uc.id === selectedUseCaseId ? { ...uc, d2Diagram: diagram } : uc
     ));
   };
 
@@ -334,9 +335,9 @@ ${requirementsMd}
     setError(null);
     setIsGeneratingSequence(true);
     try {
-      const mermaid = await generateSequenceDiagramFromPrompt(selectedUseCase, prompt, settings);
+      const d2 = await generateSequenceDiagramFromPrompt(selectedUseCase, prompt, settings);
       setUseCases(prev => prev.map(uc =>
-        uc.id === selectedUseCase.id ? { ...uc, mermaidDiagram: mermaid } : uc
+        uc.id === selectedUseCase.id ? { ...uc, d2Diagram: d2 } : uc
       ));
     } catch (err: any) {
       setError(err.message || '시퀀스 생성 중 오류가 발생했습니다.');
@@ -504,7 +505,7 @@ ${requirementsMd}
                     isRevisingUseCase={isRevisingUseCase}
                     onGenerateSequence={handleGenerateSequence}
                     isGeneratingSequence={isGeneratingSequence}
-                    onMermaidDiagramChange={handleUpdateMermaidDiagram}
+                    onD2DiagramChange={handleUpdateD2Diagram}
                   />
                 </div>
               </ScrollArea>

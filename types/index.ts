@@ -18,7 +18,7 @@ export interface UseCase {
   assumptions: string[];
   actors: Actor[];
   flow: Step[];
-  mermaidDiagram: string;
+  d2Diagram: string;
   requirements: Requirement[];
   createdAt: Date;
 }

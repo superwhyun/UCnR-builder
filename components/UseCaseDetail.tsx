@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { MermaidDiagram } from './MermaidDiagram';
+import { D2Diagram } from './D2Diagram';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Users, Loader2, Trash2, Pencil } from 'lucide-react';
@@ -22,7 +22,7 @@ interface UseCaseDetailProps {
   isRevisingUseCase?: boolean;
   onGenerateSequence?: (prompt: string) => Promise<void>;
   isGeneratingSequence?: boolean;
-  onMermaidDiagramChange?: (diagram: string) => void;
+  onD2DiagramChange?: (diagram: string) => void;
 }
 
 export function UseCaseDetail({
@@ -32,9 +32,9 @@ export function UseCaseDetail({
   isRevisingUseCase = false,
   onGenerateSequence,
   isGeneratingSequence = false,
-  onMermaidDiagramChange,
+  onD2DiagramChange,
 }: UseCaseDetailProps) {
-  const [diagramDraft, setDiagramDraft] = useState(useCase.mermaidDiagram);
+  const [diagramDraft, setDiagramDraft] = useState(useCase.d2Diagram);
   const [revisePrompt, setRevisePrompt] = useState('');
   const [sequencePrompt, setSequencePrompt] = useState('');
   const [assumptionsDraft, setAssumptionsDraft] = useState(useCase.assumptions.join('\n'));
@@ -51,18 +51,18 @@ export function UseCaseDetail({
   const [actorDraft, setActorDraft] = useState<{ name: string; description: string } | null>(null);
 
   useEffect(() => {
-    setDiagramDraft(useCase.mermaidDiagram);
+    setDiagramDraft(useCase.d2Diagram);
     setAssumptionsDraft((useCase.assumptions || []).join('\n'));
     setDescriptionDraft(useCase.description);
     setEditingStepIndex(null);
     setStepDraft(null);
     setEditingActorIndex(null);
     setActorDraft(null);
-  }, [useCase.id, useCase.mermaidDiagram, useCase.assumptions, useCase.description, useCase.actors]);
+  }, [useCase.id, useCase.d2Diagram, useCase.assumptions, useCase.description, useCase.actors]);
 
   const handleChangeDiagram = (value: string) => {
     setDiagramDraft(value);
-    onMermaidDiagramChange?.(value);
+    onD2DiagramChange?.(value);
   };
 
   const handleUpdateStep = (index: number, updates: Partial<Step>) => {
@@ -420,9 +420,9 @@ export function UseCaseDetail({
           value={diagramDraft}
           onChange={(e) => handleChangeDiagram(e.target.value)}
           className="min-h-44 font-mono text-xs resize-y mb-3"
-          placeholder="Mermaid 시퀀스 다이어그램 코드를 직접 수정하세요."
+          placeholder="D2 다이어그램 코드를 직접 수정하세요."
         />
-        <MermaidDiagram chart={diagramDraft} />
+        <D2Diagram chart={diagramDraft} />
       </div>
     </div>
   );

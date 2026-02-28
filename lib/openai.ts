@@ -5,8 +5,8 @@ import { Settings } from './settings';
 import { UseCase, Requirement } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// Generate mermaid diagram from use case flow
-export function generateMermaidDiagram(useCase: UseCase): string {
+// Generate D2 diagram from use case flow
+export function generateD2Diagram(useCase: UseCase): string {
   const MAX_ACTION_LENGTH = 24;
   const MAX_INFO_LENGTH = 34;
   const MAX_INFO_PARAMS = 3;
@@ -152,7 +152,7 @@ export function generateMermaidDiagram(useCase: UseCase): string {
   });
 
   const actorDefs = participants
-    .map((participant) => `    participant ${participantIdMap.get(participant)} as "${escapeLabel(participant)}"`)
+    .map((participant) => `${participantIdMap.get(participant)}: "${escapeLabel(participant)}"`)
     .join('\n');
 
   const sequence = useCase.flow
@@ -162,16 +162,15 @@ export function generateMermaidDiagram(useCase: UseCase): string {
       const targetName = step.target?.trim() || fallbackTarget;
       const targetId = participantIdMap.get(targetName) ?? sourceId;
       const contextInfo = useCase.title.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || 'ServiceContext';
-      const lines = [`    ${sourceId}->>${targetId}: ${formatActionInfo(step.action, step.order, false, contextInfo)}`];
+      const lines = [`${sourceId} -> ${targetId}: "${formatActionInfo(step.action, step.order, false, contextInfo)}"`];
       if (step.result) {
-        lines.push(`    ${targetId}-->>${sourceId}: ${formatActionInfo(step.result, step.order, true, contextInfo)}`);
+        lines.push(`${targetId} -> ${sourceId}: "${formatActionInfo(step.result, step.order, true, contextInfo)}"`);
       }
       return lines.join('\n');
     })
     .join('\n');
 
-  return `sequenceDiagram
-    autonumber
+  return `direction: down
 ${actorDefs}
 ${sequence}`;
 }
@@ -297,7 +296,7 @@ action/result에 "Action:Information" 같은 축약 표기, 키-값 표기, 콤�
     assumptions: parsed.assumptions || [],
     actors: parsed.actors || [],
     flow: parsed.flow,
-    mermaidDiagram: '',
+    d2Diagram: '',
     requirements: [],
     createdAt: new Date(),
   };
@@ -385,10 +384,12 @@ export async function generateSequenceDiagramFromPrompt(
   }
 
   const openai = createOpenAIClient(settings.openaiApiKey);
-  const systemPrompt = `You generate Mermaid sequence diagram source code.
+  const systemPrompt = `You generate D2 diagram source code.
 Return valid JSON only.
-Output must include a Mermaid sequenceDiagram string.
+Output must include a D2 graph string.
 Use concrete participants from the use case.
+Use directional edges in D2 syntax: "A -> B: \\"N. Action:ParamA,ParamB\\"".
+The output must be valid D2 and start with "direction: down".
 For each message label, use format: "N. Action:ParamA,ParamB".
 The number N must strictly follow the Use Case flow order numbers.
 Do not reorder, skip, or renumber flow steps.
@@ -411,9 +412,9 @@ Additional sequence request: ${prompt || 'none'}`,
         schema: {
           type: 'object',
           properties: {
-            mermaidDiagram: { type: 'string' }
+            d2Diagram: { type: 'string' }
           },
-          required: ['mermaidDiagram'],
+          required: ['d2Diagram'],
           additionalProperties: false
         }
       }
@@ -423,7 +424,7 @@ Additional sequence request: ${prompt || 'none'}`,
   const content = response.output_text;
   if (!content) throw new Error('API 응답이 비어있습니다.');
   const parsed = JSON.parse(content);
-  return parsed.mermaidDiagram;
+  return parsed.d2Diagram;
 }
 
 // Generate requirements from prompt using OpenAI Responses API
