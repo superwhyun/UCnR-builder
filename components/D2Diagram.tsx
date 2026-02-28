@@ -11,6 +11,54 @@ interface D2DiagramProps {
   className?: string;
 }
 
+const DIAGRAM_SCALE = 0.82;
+const FONT_SCALE = 1.5;
+
+function upscaleSvgFont(svg: string, factor: number): string {
+  const scale = (value: string) => `${Math.max(1, Number(value) * factor).toFixed(2)}`;
+
+  let updated = svg.replace(/font-size="([\d.]+)"/g, (_, raw) => `font-size="${scale(raw)}"`);
+  updated = updated.replace(/font-size:\s*([\d.]+)px/g, (_, raw) => `font-size:${scale(raw)}px`);
+  updated = updated.replace(/font:\s*([\d.]+)px/g, (_, raw) => `font:${scale(raw)}px`);
+
+  return updated;
+}
+
+function normalizeD2QuotedNewlines(source: string): string {
+  let normalized = '';
+  let inQuote = false;
+  let escaped = false;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+
+    if (ch === '"' && !escaped) {
+      inQuote = !inQuote;
+      normalized += ch;
+      continue;
+    }
+
+    if ((ch === '\n' || ch === '\r') && inQuote) {
+      normalized += '\\n';
+      if (ch === '\r' && source[i + 1] === '\n') {
+        i += 1;
+      }
+      escaped = false;
+      continue;
+    }
+
+    normalized += ch;
+
+    if (ch === '\\' && !escaped) {
+      escaped = true;
+    } else {
+      escaped = false;
+    }
+  }
+
+  return normalized;
+}
+
 export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
   const d2Ref = useRef<D2 | null>(null);
@@ -35,23 +83,25 @@ export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
       setError(null);
 
       try {
-        const result = await d2Ref.current!.compile(chart, {
+        const safeChart = normalizeD2QuotedNewlines(chart);
+        const result = await d2Ref.current!.compile(safeChart, {
           options: {
             layout: 'dagre',
             pad: 24,
-            scale: 1,
+            scale: DIAGRAM_SCALE,
             center: true,
             themeID: 0,
           },
         });
 
-        const svg = await d2Ref.current!.render(result.diagram, {
+        const rawSvg = await d2Ref.current!.render(result.diagram, {
           ...result.renderOptions,
           center: true,
           pad: 24,
-          scale: 1,
+          scale: DIAGRAM_SCALE,
           noXMLTag: true,
         });
+        const svg = upscaleSvgFont(rawSvg, FONT_SCALE);
 
         if (cancelled || !ref.current) return;
 

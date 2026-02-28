@@ -124,11 +124,11 @@ export function generateD2Diagram(useCase: UseCase): string {
     return unique.slice(0, MAX_INFO_PARAMS);
   };
 
-  const formatActionInfo = (value: string, stepOrder: number, isResult: boolean, fallbackContext: string): string => {
+  const formatActionInfo = (value: string, isResult: boolean, fallbackContext: string): string => {
     const normalized = normalizeText(value);
     if (!normalized) {
       const fallbackAction = isResult ? 'ReturnValidationResult' : 'RouteServiceRequest';
-      return `${stepOrder}. ${fallbackAction}:${fallbackContext}`;
+      return `${fallbackAction}:${fallbackContext}`;
     }
 
     if (normalized.includes(':')) {
@@ -136,12 +136,12 @@ export function generateD2Diagram(useCase: UseCase): string {
       const action = clamp(mapAction(rawAction, isResult), MAX_ACTION_LENGTH);
       const infoList = mapInformationList(`${rawInfo} ${fallbackContext}`, isResult, action);
       const info = clamp(infoList.join(','), MAX_INFO_LENGTH);
-      return `${stepOrder}. ${action}:${info}`;
+      return `${action}:${info}`;
     }
 
     const action = mapAction(normalized, isResult);
     const infoList = mapInformationList(`${normalized} ${fallbackContext}`, isResult, action);
-    return `${stepOrder}. ${clamp(action, MAX_ACTION_LENGTH)}:${clamp(infoList.join(','), MAX_INFO_LENGTH)}`;
+    return `${clamp(action, MAX_ACTION_LENGTH)}:${clamp(infoList.join(','), MAX_INFO_LENGTH)}`;
   };
   const toTwoLineLabel = (value: string): string => {
     if (value.includes(':')) {
@@ -157,6 +157,17 @@ export function generateD2Diagram(useCase: UseCase): string {
   };
 
   const formatParticipant = (value: string) => `"${escapeLabel(value)}"`;
+  const formatParticipantLabel = (value: string): string => {
+    const normalized = normalizeText(value);
+    if (normalized.length <= 10) return normalized;
+    const words = normalized.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      const pivot = Math.ceil(words.length / 2);
+      return `${words.slice(0, pivot).join(' ')}\\n${words.slice(pivot).join(' ')}`;
+    }
+    const pivot = Math.ceil(normalized.length / 2);
+    return `${normalized.slice(0, pivot)}\\n${normalized.slice(pivot)}`;
+  };
   const participants = [...new Set(useCase.flow.flatMap((flowStep) => [flowStep.actor, flowStep.target].filter(Boolean) as string[]))];
 
   const sequence = useCase.flow
@@ -165,14 +176,14 @@ export function generateD2Diagram(useCase: UseCase): string {
       const targetName = step.target?.trim() || fallbackTarget;
       const contextInfo = useCase.title.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || 'ServiceContext';
       const lines = [
-        `${formatParticipant(step.actor)} -> ${formatParticipant(targetName)}: "${escapeLabel(
-          toTwoLineLabel(formatActionInfo(step.action, step.order, false, contextInfo))
+        `${formatParticipant(formatParticipantLabel(step.actor))} -> ${formatParticipant(formatParticipantLabel(targetName))}: "${escapeLabel(
+          toTwoLineLabel(formatActionInfo(step.action, false, contextInfo))
         )}"`,
       ];
       if (step.result) {
         lines.push(
-          `${formatParticipant(targetName)} -> ${formatParticipant(step.actor)}: "${escapeLabel(
-            toTwoLineLabel(formatActionInfo(step.result, step.order, true, contextInfo))
+          `${formatParticipant(formatParticipantLabel(targetName))} -> ${formatParticipant(formatParticipantLabel(step.actor))}: "${escapeLabel(
+            toTwoLineLabel(formatActionInfo(step.result, true, contextInfo))
           )}"`
         );
       }
@@ -398,13 +409,15 @@ Return valid JSON only.
 Output must include a D2 graph string that is a sequence diagram.
 Use concrete participants from the use case.
 Use this exact leading line: "shape: sequence_diagram".
-Use directional edges in D2 syntax: "\\"A\\" -> \\"B\\": \\"N. Action:ParamA,ParamB\\"".
+Use directional edges in D2 syntax: "\\"A\\" -> \\"B\\": \\"Action:ParamA,ParamB\\"".
 Do not use flowchart-style node definitions.
 Each message label must be two lines using "\\n".
-Line 1 format: "N. Action:"
+Line 1 format: "Action:"
 Line 2 format: "ParamA,ParamB"
-The number N must strictly follow the Use Case flow order numbers.
-Do not reorder, skip, or renumber flow steps.
+Do not include step numbers in labels.
+Parameter values must be comma-separated when multiple.
+Never insert a physical newline inside quoted strings. Use escaped "\\n" only.
+Keep participant display labels concise (max 10 chars if possible). If long, split with "\\n".
 Avoid generic labels like Request/Response.`;
 
   const response = await openai.responses.create({

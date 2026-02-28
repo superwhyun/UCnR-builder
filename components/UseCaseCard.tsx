@@ -12,9 +12,17 @@ interface UseCaseCardProps {
   onClick?: () => void;
   onDelete?: () => void;
   onDownload?: () => void;
+  onDownloadPptx?: () => void;
 }
 
-export function UseCaseCard({ useCase, isSelected = false, onClick, onDelete, onDownload }: UseCaseCardProps) {
+export function UseCaseCard({
+  useCase,
+  isSelected = false,
+  onClick,
+  onDelete,
+  onDownload,
+  onDownloadPptx,
+}: UseCaseCardProps) {
   return (
     <Card
       onClick={onClick}
@@ -51,6 +59,18 @@ export function UseCaseCard({ useCase, isSelected = false, onClick, onDelete, on
             }}
           >
             <Download className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={`h-6 px-2 text-[10px] ${isSelected ? 'text-primary-foreground/70 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownloadPptx?.();
+            }}
+          >
+            PPT
           </Button>
           <Button
             type="button"

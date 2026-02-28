@@ -288,6 +288,174 @@ ${requirementsMd}
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadUseCasePptx = async (useCase: UseCase) => {
+    const slug = useCase.title
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'usecase';
+
+    const participants = [...new Set(
+      useCase.flow.flatMap((step) => [step.actor, step.target].filter(Boolean) as string[])
+    )];
+
+    const { default: PptxGenJS } = await import('pptxgenjs');
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_WIDE';
+    pptx.author = 'UseCase Builder';
+    pptx.subject = useCase.title;
+    pptx.title = `${useCase.title} - Sequence`;
+
+    const slide = pptx.addSlide();
+    slide.background = { color: 'FFFFFF' };
+    slide.addText(useCase.title, {
+      x: 0.5,
+      y: 0.2,
+      w: 12.3,
+      h: 0.35,
+      fontSize: 18,
+      bold: true,
+      color: '1F2937',
+    });
+
+    const left = 0.5;
+    const right = 12.8;
+    const top = 0.9;
+    const bottom = 6.8;
+    const width = right - left;
+
+    const count = Math.max(1, participants.length);
+    const slot = width / count;
+    const actorWidth = Math.min(1.6, Math.max(0.95, slot * 0.75));
+    const actorHeight = 0.38;
+    const actorY = top;
+    const lifelineTop = actorY + actorHeight;
+    const lifelineBottom = bottom;
+    const centers = new Map<string, number>();
+
+    participants.forEach((name, idx) => {
+      const center = left + slot * idx + slot / 2;
+      centers.set(name, center);
+      slide.addShape('roundRect', {
+        x: center - actorWidth / 2,
+        y: actorY,
+        w: actorWidth,
+        h: actorHeight,
+        line: { color: '64748B', pt: 1 },
+        fill: { color: 'F8FAFC' },
+      });
+      slide.addText(name, {
+        x: center - actorWidth / 2 + 0.04,
+        y: actorY + 0.02,
+        w: actorWidth - 0.08,
+        h: actorHeight - 0.04,
+        fontSize: 11,
+        align: 'center',
+        valign: 'middle',
+        color: '111827',
+      });
+      slide.addShape('line', {
+        x: center,
+        y: lifelineTop,
+        w: 0,
+        h: lifelineBottom - lifelineTop,
+        line: { color: '94A3B8', pt: 0.75, dashType: 'dash' },
+      });
+    });
+
+    const rowTop = lifelineTop + 0.2;
+    const rowBottom = bottom - 0.2;
+    const rowCount = Math.max(1, useCase.flow.length * 2);
+    const stepGap = Math.max(0.22, Math.min(0.42, (rowBottom - rowTop) / rowCount));
+
+    const drawEdge = (
+      from: string,
+      to: string,
+      label: string,
+      y: number,
+      isResult: boolean
+    ) => {
+      const fromX = centers.get(from);
+      const toX = centers.get(to);
+      if (fromX == null || toX == null) return;
+
+      const isSelf = Math.abs(toX - fromX) < 0.01;
+      const color = isResult ? '475569' : '1D4ED8';
+
+      if (isSelf) {
+        const loop = 0.45;
+        slide.addShape('line', {
+          x: fromX,
+          y,
+          w: loop,
+          h: 0,
+          line: { color, pt: 1.15 },
+        });
+        slide.addShape('line', {
+          x: fromX + loop,
+          y,
+          w: 0,
+          h: stepGap * 0.65,
+          line: { color, pt: 1.15 },
+        });
+        slide.addShape('line', {
+          x: fromX + loop,
+          y: y + stepGap * 0.65,
+          w: -loop,
+          h: 0,
+          line: { color, pt: 1.15, endArrowType: 'triangle' },
+        });
+        slide.addText(label, {
+          x: fromX + 0.05,
+          y: y - 0.14,
+          w: loop + 0.2,
+          h: 0.16,
+          fontSize: 9,
+          color: '334155',
+          fit: 'shrink',
+        });
+        return;
+      }
+
+      const startX = fromX;
+      const edgeW = toX - fromX;
+      slide.addShape('line', {
+        x: startX,
+        y,
+        w: edgeW,
+        h: 0,
+        line: {
+          color,
+          pt: 1.15,
+          dashType: isResult ? 'dash' : 'solid',
+          endArrowType: 'triangle',
+        },
+      });
+
+      const labelX = Math.min(startX, startX + edgeW);
+      slide.addText(label, {
+        x: labelX + 0.04,
+        y: y - 0.14,
+        w: Math.abs(edgeW) - 0.08,
+        h: 0.16,
+        fontSize: 9,
+        align: 'center',
+        color: '334155',
+        fit: 'shrink',
+      });
+    };
+
+    useCase.flow.forEach((step, idx) => {
+      const target = step.target?.trim() || participants.find((name) => name !== step.actor) || step.actor;
+      const baseY = rowTop + idx * stepGap * 2;
+      drawEdge(step.actor, target, step.action, baseY, false);
+      if (step.result) {
+        drawEdge(target, step.actor, step.result, baseY + stepGap, true);
+      }
+    });
+
+    await pptx.writeFile({ fileName: `${slug}.pptx` });
+  };
+
   const handleUpdateD2Diagram = (diagram: string) => {
     if (!selectedUseCaseId) return;
     setUseCases(prev => prev.map(uc =>
@@ -423,6 +591,7 @@ ${requirementsMd}
                   useCase={useCase}
                   isSelected={selectedUseCaseId === useCase.id}
                   onDownload={() => handleDownloadUseCase(useCase)}
+                  onDownloadPptx={() => handleDownloadUseCasePptx(useCase)}
                   onDelete={() => handleDeleteUseCase(useCase.id)}
                   onClick={() => {
                     setSelectedUseCaseId(useCase.id);
