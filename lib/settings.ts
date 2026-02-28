@@ -16,6 +16,7 @@ Use precise terminology, avoid marketing language, and avoid ambiguity.
 Assume output may be used as input to normative text drafting.
 Prefer testable, implementation-neutral statements.
 When constraints are unclear, state conservative assumptions explicitly.
+Structure use-case content into Description, Assumption, and Use Case flow.
 For use-case flow steps, write action/result as clear narrative sentences aligned to the specific use case.
 Each action/result sentence must begin with an explicit subject (actor or concrete component).
 Do not use shorthand notations such as "Action:Information" in flow action/result fields.`,
@@ -29,8 +30,8 @@ Map requirement strength to priority:
 Description prefix rules (strict):
 - high: "It is required that "
 - medium: "It is recommended that "
-- low: "It optionally can be "
-Do not use the words "shall", "can", or "may" in requirement descriptions.
+- low: "It optionally can "
+Do not use the words "shall", "may", or "should" in requirement descriptions.
 Do not use generic subjects such as "the system" or "system"; use concrete actor/component names.
 No duplicate requirements. Keep each requirement concise and testable.`,
 };

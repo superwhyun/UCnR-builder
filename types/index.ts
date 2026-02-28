@@ -1,3 +1,8 @@
+export interface Actor {
+  name: string;
+  description: string;
+}
+
 export interface Step {
   order: number;
   actor: string;
@@ -10,7 +15,8 @@ export interface UseCase {
   id: string;
   title: string;
   description: string;
-  actors: string[];
+  assumptions: string[];
+  actors: Actor[];
   flow: Step[];
   mermaidDiagram: string;
   requirements: Requirement[];

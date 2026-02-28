@@ -27,9 +27,14 @@ export function RequirementsPanel({
 }: RequirementsPanelProps) {
   const [prompt, setPrompt] = useState('');
   const [filter, setFilter] = useState<'all' | 'functional' | 'non-functional'>('all');
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const handleGenerate = () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      setInputError('요구사항 요청 내용을 먼저 입력해 주세요.');
+      return;
+    }
+    setInputError(null);
     onGenerateRequirements(prompt.trim());
     setPrompt('');
   };
@@ -63,13 +68,19 @@ export function RequirementsPanel({
         </p>
         <Textarea
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            if (inputError) setInputError(null);
+          }}
           placeholder="예: 보안 요구사항, 성능 기준, 에러 처리 방식 등..."
           className="min-h-[80px] text-sm mb-3 resize-none"
         />
+        {inputError && (
+          <p className="text-xs text-destructive mb-3">{inputError}</p>
+        )}
         <Button 
           onClick={handleGenerate} 
-          disabled={!prompt.trim() || isGenerating}
+          disabled={isGenerating}
           className="w-full"
           size="sm"
         >

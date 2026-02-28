@@ -10,16 +10,22 @@ import { SettingsDialog } from '@/components/SettingsDialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Layers, FileText, Check, AlertCircle } from 'lucide-react';
+import { Plus, Layers, FileText, Check, AlertCircle, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { Settings, getDefaultSettings, loadSettings } from '@/lib/settings';
-import { generateMermaidDiagram, generateUseCaseFromPrompt, generateRequirements } from '@/lib/openai';
+import {
+  generateUseCaseFromPrompt,
+  generateRequirements,
+  reviseUseCaseFromPrompt,
+  generateSequenceDiagramFromPrompt,
+} from '@/lib/openai';
 import {
   Alert,
   AlertDescription,
 } from '@/components/ui/alert';
 
 const APP_STATE_KEY = 'usecase-builder-app-state';
+const DETAIL_LAYOUT_BREAKPOINT = 1680;
 
 interface PersistedState {
   useCases: Array<Omit<UseCase, 'createdAt'> & { createdAt: string }>;
@@ -34,12 +40,23 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingReqs, setIsGeneratingReqs] = useState(false);
+  const [isRevisingUseCase, setIsRevisingUseCase] = useState(false);
+  const [isGeneratingSequence, setIsGeneratingSequence] = useState(false);
   const [view, setView] = useState<'chat' | 'detail'>('chat');
   const [settings, setSettings] = useState<Settings>(getDefaultSettings());
   const [error, setError] = useState<string | null>(null);
+  const [windowWidth, setWindowWidth] = useState(0);
+  const [compactFocus, setCompactFocus] = useState<'left' | 'right'>('right');
 
   useEffect(() => {
     setSettings(loadSettings());
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -50,6 +67,14 @@ export default function Home() {
       const parsed = JSON.parse(stored) as PersistedState;
       const restoredUseCases: UseCase[] = (parsed.useCases || []).map((useCase) => ({
         ...useCase,
+        assumptions: useCase.assumptions || [],
+        actors: Array.isArray(useCase.actors)
+          ? useCase.actors.map((actor: any) =>
+              typeof actor === 'string'
+                ? { name: actor, description: '역할 설명 없음' }
+                : { name: actor.name, description: actor.description || '역할 설명 없음' }
+            )
+          : [],
         createdAt: new Date(useCase.createdAt),
       }));
       const restoredMessages: Message[] = (parsed.messages || []).map((message) => ({
@@ -197,6 +222,71 @@ export default function Home() {
     }
   };
 
+  const handleDownloadUseCase = (useCase: UseCase) => {
+    const safe = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+    const slug = useCase.title
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'usecase';
+
+    const assumptionsMd = useCase.assumptions.length
+      ? useCase.assumptions.map((a, i) => `${i + 1}. ${a}`).join('\n')
+      : '- (none)';
+
+    const actorsMd = useCase.actors.length
+      ? useCase.actors.map((actor) => `| ${safe(actor.name)} | ${safe(actor.description)} |`).join('\n')
+      : '| - | - |';
+
+    const flowMd = useCase.flow.length
+      ? useCase.flow.map((step) => {
+          const target = step.target || '-';
+          const result = step.result || '-';
+          return `| ${step.order} | ${safe(step.actor)} | ${safe(target)} | ${safe(step.action)} | ${safe(result)} |`;
+        }).join('\n')
+      : '| - | - | - | - | - |';
+
+    const requirementsMd = useCase.requirements.length
+      ? useCase.requirements.map((req) => `| ${req.priority} | ${req.type} | ${req.selected ? 'yes' : 'no'} | ${safe(req.description)} |`).join('\n')
+      : '| - | - | - | - |';
+
+    const markdown = `# ${useCase.title}
+
+## Description
+${useCase.description}
+
+## Assumptions
+${assumptionsMd}
+
+## Actors
+| Name | Description |
+| --- | --- |
+${actorsMd}
+
+## Use Case Flow
+| Order | Actor | Target | Action | Result |
+| --- | --- | --- | --- | --- |
+${flowMd}
+
+## Sequence Diagram (Mermaid)
+\`\`\`mermaid
+${useCase.mermaidDiagram || 'sequenceDiagram\n  %% not generated yet'}
+\`\`\`
+
+## Requirements
+| Priority | Type | Selected | Description |
+| --- | --- | --- | --- |
+${requirementsMd}
+`;
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${slug}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleUpdateMermaidDiagram = (diagram: string) => {
     if (!selectedUseCaseId) return;
     setUseCases(prev => prev.map(uc =>
@@ -204,20 +294,68 @@ export default function Home() {
     ));
   };
 
-  const handleRegenerateMermaidDiagram = () => {
+  const handleUpdateUseCaseContent = (updates: Partial<Pick<UseCase, 'title' | 'description' | 'assumptions' | 'actors' | 'flow'>>) => {
     if (!selectedUseCaseId) return;
-    setUseCases(prev => prev.map(uc =>
-      uc.id === selectedUseCaseId ? { ...uc, mermaidDiagram: generateMermaidDiagram(uc) } : uc
-    ));
+    setUseCases(prev => prev.map(uc => (
+      uc.id === selectedUseCaseId ? { ...uc, ...updates } : uc
+    )));
+  };
+
+  const handleReviseUseCase = async (
+    prompt: string,
+    editableClauses: { description: boolean; assumptions: boolean; actors: boolean; useCase: boolean }
+  ) => {
+    if (!selectedUseCase) return;
+    setError(null);
+    setIsRevisingUseCase(true);
+    try {
+      const revised = await reviseUseCaseFromPrompt(selectedUseCase, prompt, editableClauses, settings);
+      setUseCases(prev => prev.map(uc =>
+        uc.id === selectedUseCase.id
+          ? {
+              ...uc,
+              title: revised.title,
+              description: editableClauses.description ? revised.description : uc.description,
+              assumptions: editableClauses.assumptions ? revised.assumptions : uc.assumptions,
+              actors: editableClauses.actors ? revised.actors : uc.actors,
+              flow: editableClauses.useCase ? revised.flow : uc.flow,
+            }
+          : uc
+      ));
+    } catch (err: any) {
+      setError(err.message || '유즈케이스 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsRevisingUseCase(false);
+    }
+  };
+
+  const handleGenerateSequence = async (prompt: string) => {
+    if (!selectedUseCase) return;
+    setError(null);
+    setIsGeneratingSequence(true);
+    try {
+      const mermaid = await generateSequenceDiagramFromPrompt(selectedUseCase, prompt, settings);
+      setUseCases(prev => prev.map(uc =>
+        uc.id === selectedUseCase.id ? { ...uc, mermaidDiagram: mermaid } : uc
+      ));
+    } catch (err: any) {
+      setError(err.message || '시퀀스 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingSequence(false);
+    }
   };
 
   const totalRequirements = useCases.reduce((sum, uc) => sum + uc.requirements.filter(r => r.selected).length, 0);
   const hasApiKey = !!settings.openaiApiKey;
+  const isDetailCompact = view === 'detail' && windowWidth > 0 && windowWidth < DETAIL_LAYOUT_BREAKPOINT;
+  const showLeftSidebar = !isDetailCompact || compactFocus === 'left';
+  const showRightPane = !isDetailCompact || compactFocus === 'right';
 
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <div className="w-80 border-r border-border bg-card flex flex-col">
+      {showLeftSidebar ? (
+      <div className="w-80 shrink-0 border-r border-border bg-card flex flex-col">
         {/* Header */}
         <div className="p-5 border-b border-border">
           <div className="flex items-center justify-between">
@@ -283,6 +421,7 @@ export default function Home() {
                   key={useCase.id}
                   useCase={useCase}
                   isSelected={selectedUseCaseId === useCase.id}
+                  onDownload={() => handleDownloadUseCase(useCase)}
                   onDelete={() => handleDeleteUseCase(useCase.id)}
                   onClick={() => {
                     setSelectedUseCaseId(useCase.id);
@@ -295,6 +434,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+      ) : (
+        <div className="w-12 shrink-0 border-r border-border bg-card flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCompactFocus('left')}
+            title="유즈케이스 목록 펼치기"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -316,9 +467,9 @@ export default function Home() {
             }
           />
         ) : selectedUseCase ? (
-          <div className="flex h-full">
+          <div className="flex h-full min-h-0 overflow-hidden">
             {/* UseCase Detail */}
-            <div className="flex-1 min-w-0 border-r border-border">
+            <div className="w-[56rem] min-w-[56rem] shrink-0 min-h-0 border-r border-border overflow-x-hidden">
               <div className="flex items-center gap-2 px-6 py-4 border-b border-border">
                 <Button
                   variant="ghost"
@@ -330,24 +481,54 @@ export default function Home() {
                 </Button>
                 <Separator orientation="vertical" className="h-4" />
                 <span className="text-sm text-muted-foreground">유즈케이스 상세</span>
+                {isDetailCompact && (
+                  <>
+                    <Separator orientation="vertical" className="h-4" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCompactFocus('right')}
+                      className="text-muted-foreground"
+                    >
+                      요구사항 보기
+                    </Button>
+                  </>
+                )}
               </div>
-              <ScrollArea className="h-[calc(100vh-65px)]">
+              <ScrollArea className="h-full">
                 <div className="p-6 max-w-3xl">
                   <UseCaseDetail
                     useCase={selectedUseCase}
+                    onUpdateUseCaseContent={handleUpdateUseCaseContent}
+                    onReviseUseCase={handleReviseUseCase}
+                    isRevisingUseCase={isRevisingUseCase}
+                    onGenerateSequence={handleGenerateSequence}
+                    isGeneratingSequence={isGeneratingSequence}
                     onMermaidDiagramChange={handleUpdateMermaidDiagram}
-                    onRegenerateMermaidDiagram={handleRegenerateMermaidDiagram}
                   />
                 </div>
               </ScrollArea>
             </div>
 
             {/* Requirements Panel */}
-            <div className="w-96 bg-card">
+            {showRightPane ? (
+            <div className="w-96 min-w-96 xl:w-[28rem] xl:min-w-[28rem] 2xl:w-[32rem] 2xl:min-w-[32rem] shrink-0 min-h-0 bg-card border-l border-border">
               <div className="px-6 py-4 border-b border-border">
-                <h3 className="font-medium">요구사항 관리</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">요구사항 관리</h3>
+                  {isDetailCompact && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCompactFocus('left')}
+                      className="text-muted-foreground"
+                    >
+                      목록 보기
+                    </Button>
+                  )}
+                </div>
               </div>
-              <ScrollArea className="h-[calc(100vh-65px)]">
+              <ScrollArea className="h-full">
                 <div className="p-5">
                   <RequirementsPanel
                     useCase={selectedUseCase}
@@ -359,6 +540,18 @@ export default function Home() {
                 </div>
               </ScrollArea>
             </div>
+            ) : (
+              <div className="w-12 shrink-0 border-l border-border bg-card flex items-center justify-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setCompactFocus('right')}
+                  title="요구사항 펼치기"
+                >
+                  <PanelRightOpen className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-center h-full">
