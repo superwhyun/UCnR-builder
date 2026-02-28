@@ -144,34 +144,23 @@ export function generateD2Diagram(useCase: UseCase): string {
     return `${stepOrder}. ${clamp(action, MAX_ACTION_LENGTH)}:${clamp(infoList.join(','), MAX_INFO_LENGTH)}`;
   };
 
-  const participants = [...new Set(useCase.flow.flatMap((step) => [step.actor, step.target].filter(Boolean) as string[]))];
-  const participantIdMap = new Map<string, string>();
-
-  participants.forEach((participant, index) => {
-    participantIdMap.set(participant, `participant_${index + 1}`);
-  });
-
-  const actorDefs = participants
-    .map((participant) => `${participantIdMap.get(participant)}: "${escapeLabel(participant)}"`)
-    .join('\n');
+  const formatParticipant = (value: string) => `"${escapeLabel(value)}"`;
+  const participants = [...new Set(useCase.flow.flatMap((flowStep) => [flowStep.actor, flowStep.target].filter(Boolean) as string[]))];
 
   const sequence = useCase.flow
     .map((step) => {
-      const sourceId = participantIdMap.get(step.actor) ?? 'participant_1';
       const fallbackTarget = participants.find((participant) => participant !== step.actor) ?? step.actor;
       const targetName = step.target?.trim() || fallbackTarget;
-      const targetId = participantIdMap.get(targetName) ?? sourceId;
       const contextInfo = useCase.title.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || 'ServiceContext';
-      const lines = [`${sourceId} -> ${targetId}: "${formatActionInfo(step.action, step.order, false, contextInfo)}"`];
+      const lines = [`${formatParticipant(step.actor)} -> ${formatParticipant(targetName)}: "${escapeLabel(formatActionInfo(step.action, step.order, false, contextInfo))}"`];
       if (step.result) {
-        lines.push(`${targetId} -> ${sourceId}: "${formatActionInfo(step.result, step.order, true, contextInfo)}"`);
+        lines.push(`${formatParticipant(targetName)} -> ${formatParticipant(step.actor)}: "${escapeLabel(formatActionInfo(step.result, step.order, true, contextInfo))}"`);
       }
       return lines.join('\n');
     })
     .join('\n');
 
-  return `direction: down
-${actorDefs}
+  return `shape: sequence_diagram
 ${sequence}`;
 }
 
@@ -384,12 +373,13 @@ export async function generateSequenceDiagramFromPrompt(
   }
 
   const openai = createOpenAIClient(settings.openaiApiKey);
-  const systemPrompt = `You generate D2 diagram source code.
+  const systemPrompt = `You generate D2 sequence diagram source code.
 Return valid JSON only.
-Output must include a D2 graph string.
+Output must include a D2 graph string that is a sequence diagram.
 Use concrete participants from the use case.
-Use directional edges in D2 syntax: "A -> B: \\"N. Action:ParamA,ParamB\\"".
-The output must be valid D2 and start with "direction: down".
+Use this exact leading line: "shape: sequence_diagram".
+Use directional edges in D2 syntax: "\\"A\\" -> \\"B\\": \\"N. Action:ParamA,ParamB\\"".
+Do not use flowchart-style node definitions.
 For each message label, use format: "N. Action:ParamA,ParamB".
 The number N must strictly follow the Use Case flow order numbers.
 Do not reorder, skip, or renumber flow steps.

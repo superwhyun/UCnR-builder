@@ -270,7 +270,7 @@ ${flowMd}
 
 ## Sequence Diagram (D2)
 \`\`\`d2
-${useCase.d2Diagram || 'direction: down\n  # not generated yet'}
+${useCase.d2Diagram || 'shape: sequence_diagram\n  # not generated yet'}
 \`\`\`
 
 ## Requirements
