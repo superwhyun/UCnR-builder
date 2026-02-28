@@ -143,6 +143,18 @@ export function generateD2Diagram(useCase: UseCase): string {
     const infoList = mapInformationList(`${normalized} ${fallbackContext}`, isResult, action);
     return `${stepOrder}. ${clamp(action, MAX_ACTION_LENGTH)}:${clamp(infoList.join(','), MAX_INFO_LENGTH)}`;
   };
+  const toTwoLineLabel = (value: string): string => {
+    if (value.includes(':')) {
+      const [head, ...tail] = value.split(':');
+      const tailText = tail.join(':').trim();
+      return tailText ? `${head}:\\n${tailText}` : `${head}\\n-`;
+    }
+
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= 2) return `${value}\\n-`;
+    const pivot = Math.ceil(words.length / 2);
+    return `${words.slice(0, pivot).join(' ')}\\n${words.slice(pivot).join(' ')}`;
+  };
 
   const formatParticipant = (value: string) => `"${escapeLabel(value)}"`;
   const participants = [...new Set(useCase.flow.flatMap((flowStep) => [flowStep.actor, flowStep.target].filter(Boolean) as string[]))];
@@ -152,9 +164,17 @@ export function generateD2Diagram(useCase: UseCase): string {
       const fallbackTarget = participants.find((participant) => participant !== step.actor) ?? step.actor;
       const targetName = step.target?.trim() || fallbackTarget;
       const contextInfo = useCase.title.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || 'ServiceContext';
-      const lines = [`${formatParticipant(step.actor)} -> ${formatParticipant(targetName)}: "${escapeLabel(formatActionInfo(step.action, step.order, false, contextInfo))}"`];
+      const lines = [
+        `${formatParticipant(step.actor)} -> ${formatParticipant(targetName)}: "${escapeLabel(
+          toTwoLineLabel(formatActionInfo(step.action, step.order, false, contextInfo))
+        )}"`,
+      ];
       if (step.result) {
-        lines.push(`${formatParticipant(targetName)} -> ${formatParticipant(step.actor)}: "${escapeLabel(formatActionInfo(step.result, step.order, true, contextInfo))}"`);
+        lines.push(
+          `${formatParticipant(targetName)} -> ${formatParticipant(step.actor)}: "${escapeLabel(
+            toTwoLineLabel(formatActionInfo(step.result, step.order, true, contextInfo))
+          )}"`
+        );
       }
       return lines.join('\n');
     })
@@ -380,7 +400,9 @@ Use concrete participants from the use case.
 Use this exact leading line: "shape: sequence_diagram".
 Use directional edges in D2 syntax: "\\"A\\" -> \\"B\\": \\"N. Action:ParamA,ParamB\\"".
 Do not use flowchart-style node definitions.
-For each message label, use format: "N. Action:ParamA,ParamB".
+Each message label must be two lines using "\\n".
+Line 1 format: "N. Action:"
+Line 2 format: "ParamA,ParamB"
 The number N must strictly follow the Use Case flow order numbers.
 Do not reorder, skip, or renumber flow steps.
 Avoid generic labels like Request/Response.`;
