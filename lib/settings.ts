@@ -1,39 +1,25 @@
+import {
+  DEFAULT_REQUIREMENTS_SYSTEM_PROMPT,
+  DEFAULT_SEQUENCE_SYSTEM_PROMPT,
+  DEFAULT_USECASE_SYSTEM_PROMPT,
+} from './default-system-prompts';
+
 const STORAGE_KEY = 'usecase-builder-settings';
 
 export interface Settings {
   openaiApiKey: string;
   model: string;
   useCaseSystemPrompt: string;
+  sequenceSystemPrompt: string;
   requirementsSystemPrompt: string;
 }
 
 const defaultSettings: Settings = {
   openaiApiKey: '',
   model: 'gpt-5.2',
-  useCaseSystemPrompt: `You are an ITU-T technical editor and requirements analyst.
-Write in a formal, neutral, standards-oriented tone.
-Use precise terminology, avoid marketing language, and avoid ambiguity.
-Assume output may be used as input to normative text drafting.
-Prefer testable, implementation-neutral statements.
-When constraints are unclear, state conservative assumptions explicitly.
-Structure use-case content into Description, Assumption, and Use Case flow.
-For use-case flow steps, write action/result as clear narrative sentences aligned to the specific use case.
-Each action/result sentence must begin with an explicit subject (actor or concrete component).
-Do not use shorthand notations such as "Action:Information" in flow action/result fields.`,
-  requirementsSystemPrompt: `You are drafting requirements for an ITU-T style specification.
-Requirements must be atomic, verifiable, and implementation-neutral.
-Use clear compliance-oriented wording and avoid vague adjectives.
-Map requirement strength to priority:
-- mandatory -> high
-- strong optional -> medium
-- optional -> low
-Description prefix rules (strict):
-- high: "It is required that "
-- medium: "It is recommended that "
-- low: "It optionally can "
-Do not use the words "shall", "may", or "should" in requirement descriptions.
-Do not use generic subjects such as "the system" or "system"; use concrete actor/component names.
-No duplicate requirements. Keep each requirement concise and testable.`,
+  useCaseSystemPrompt: DEFAULT_USECASE_SYSTEM_PROMPT,
+  sequenceSystemPrompt: DEFAULT_SEQUENCE_SYSTEM_PROMPT,
+  requirementsSystemPrompt: DEFAULT_REQUIREMENTS_SYSTEM_PROMPT,
 };
 
 export function getDefaultSettings(): Settings {

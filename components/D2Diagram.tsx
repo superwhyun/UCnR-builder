@@ -13,6 +13,7 @@ interface D2DiagramProps {
 
 const DIAGRAM_SCALE = 0.82;
 const FONT_SCALE = 1.5;
+const RENDER_DEBOUNCE_MS = 180;
 
 function upscaleSvgFont(svg: string, factor: number): string {
   const scale = (value: string) => `${Math.max(1, Number(value) * factor).toFixed(2)}`;
@@ -62,6 +63,8 @@ function normalizeD2QuotedNewlines(source: string): string {
 export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
   const d2Ref = useRef<D2 | null>(null);
+  const lastRenderedChartRef = useRef('');
+  const renderNonceRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [svgMarkup, setSvgMarkup] = useState('');
@@ -72,18 +75,35 @@ export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
   }, []);
 
   useEffect(() => {
-    if (!ref.current || !chart.trim() || !d2Ref.current) {
+    const safeChart = normalizeD2QuotedNewlines(chart);
+
+    if (!safeChart.trim()) {
+      setIsLoading(false);
+      setError(null);
+      setSvgMarkup('');
+      lastRenderedChartRef.current = '';
+      if (ref.current) ref.current.innerHTML = '';
+      return;
+    }
+
+    if (!ref.current || !d2Ref.current) {
+      return;
+    }
+
+    if (safeChart === lastRenderedChartRef.current) {
+      setIsLoading(false);
       return;
     }
 
     let cancelled = false;
+    const nonce = renderNonceRef.current + 1;
+    renderNonceRef.current = nonce;
 
     const renderDiagram = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const safeChart = normalizeD2QuotedNewlines(chart);
         const result = await d2Ref.current!.compile(safeChart, {
           options: {
             layout: 'dagre',
@@ -103,8 +123,9 @@ export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
         });
         const svg = upscaleSvgFont(rawSvg, FONT_SCALE);
 
-        if (cancelled || !ref.current) return;
+        if (cancelled || !ref.current || nonce !== renderNonceRef.current) return;
 
+        lastRenderedChartRef.current = safeChart;
         setSvgMarkup(svg);
         ref.current.innerHTML = svg;
         const svgElement = ref.current.querySelector('svg');
@@ -124,10 +145,13 @@ export function D2Diagram({ chart, className = '' }: D2DiagramProps) {
       }
     };
 
-    renderDiagram();
+    const timer = window.setTimeout(() => {
+      renderDiagram();
+    }, RENDER_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [chart]);
 

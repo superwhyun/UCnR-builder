@@ -294,9 +294,58 @@ ${requirementsMd}
       .replace(/[^a-z0-9가-힣]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'usecase';
 
-    const participants = [...new Set(
-      useCase.flow.flatMap((step) => [step.actor, step.target].filter(Boolean) as string[])
-    )];
+    const unescapeD2 = (value: string) =>
+      value
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .trim();
+
+    const parseD2SequenceEdges = (source: string) => {
+      const edges: Array<{ from: string; to: string; label: string; dashed: boolean }> = [];
+      const lines = source.split(/\r?\n/);
+      const quotedEdge = /^\s*"((?:\\.|[^"\\])*)"\s*->\s*"((?:\\.|[^"\\])*)"\s*:\s*"((?:\\.|[^"\\])*)"\s*$/;
+      const bareEdge = /^\s*([A-Za-z0-9_.-]+)\s*->\s*([A-Za-z0-9_.-]+)\s*:\s*"((?:\\.|[^"\\])*)"\s*$/;
+
+      for (const line of lines) {
+        if (!line.trim() || line.trim().startsWith('#')) continue;
+        let matched = line.match(quotedEdge);
+        if (matched) {
+          edges.push({
+            from: unescapeD2(matched[1]),
+            to: unescapeD2(matched[2]),
+            label: unescapeD2(matched[3]),
+            dashed: false,
+          });
+          continue;
+        }
+        matched = line.match(bareEdge);
+        if (matched) {
+          edges.push({
+            from: unescapeD2(matched[1]),
+            to: unescapeD2(matched[2]),
+            label: unescapeD2(matched[3]),
+            dashed: false,
+          });
+        }
+      }
+
+      return edges;
+    };
+
+    const parsedEdges = parseD2SequenceEdges(useCase.d2Diagram || '');
+    const fallbackEdges = useCase.flow.flatMap((step) => {
+      const target = step.target?.trim() || useCase.flow.find((s) => s.actor !== step.actor)?.actor || step.actor;
+      const items: Array<{ from: string; to: string; label: string; dashed: boolean }> = [
+        { from: step.actor, to: target, label: step.action, dashed: false },
+      ];
+      if (step.result) {
+        items.push({ from: target, to: step.actor, label: step.result, dashed: true });
+      }
+      return items;
+    });
+    const edges = parsedEdges.length > 0 ? parsedEdges : fallbackEdges;
+    const participants = [...new Set(edges.flatMap((edge) => [edge.from, edge.to]))];
 
     const { default: PptxGenJS } = await import('pptxgenjs');
     const pptx = new PptxGenJS();
@@ -364,7 +413,7 @@ ${requirementsMd}
 
     const rowTop = lifelineTop + 0.2;
     const rowBottom = bottom - 0.2;
-    const rowCount = Math.max(1, useCase.flow.length * 2);
+    const rowCount = Math.max(1, edges.length);
     const stepGap = Math.max(0.22, Math.min(0.42, (rowBottom - rowTop) / rowCount));
 
     const drawEdge = (
@@ -372,14 +421,14 @@ ${requirementsMd}
       to: string,
       label: string,
       y: number,
-      isResult: boolean
+      dashed: boolean
     ) => {
       const fromX = centers.get(from);
       const toX = centers.get(to);
       if (fromX == null || toX == null) return;
 
       const isSelf = Math.abs(toX - fromX) < 0.01;
-      const color = isResult ? '475569' : '1D4ED8';
+      const color = dashed ? '475569' : '1D4ED8';
 
       if (isSelf) {
         const loop = 0.45;
@@ -398,11 +447,11 @@ ${requirementsMd}
           line: { color, pt: 1.15 },
         });
         slide.addShape('line', {
-          x: fromX + loop,
+          x: fromX,
           y: y + stepGap * 0.65,
-          w: -loop,
+          w: loop,
           h: 0,
-          line: { color, pt: 1.15, endArrowType: 'triangle' },
+          line: { color, pt: 1.15, beginArrowType: 'triangle' },
         });
         slide.addText(label, {
           x: fromX + 0.05,
@@ -416,26 +465,28 @@ ${requirementsMd}
         return;
       }
 
-      const startX = fromX;
-      const edgeW = toX - fromX;
+      const leftX = Math.min(fromX, toX);
+      const edgeW = Math.abs(toX - fromX);
+      const toRight = toX > fromX;
       slide.addShape('line', {
-        x: startX,
+        x: leftX,
         y,
         w: edgeW,
         h: 0,
         line: {
           color,
           pt: 1.15,
-          dashType: isResult ? 'dash' : 'solid',
-          endArrowType: 'triangle',
+          dashType: dashed ? 'dash' : 'solid',
+          beginArrowType: toRight ? 'none' : 'triangle',
+          endArrowType: toRight ? 'triangle' : 'none',
         },
       });
 
-      const labelX = Math.min(startX, startX + edgeW);
+      const labelWidth = Math.max(0.2, edgeW - 0.08);
       slide.addText(label, {
-        x: labelX + 0.04,
+        x: leftX + 0.04,
         y: y - 0.14,
-        w: Math.abs(edgeW) - 0.08,
+        w: labelWidth,
         h: 0.16,
         fontSize: 9,
         align: 'center',
@@ -444,13 +495,9 @@ ${requirementsMd}
       });
     };
 
-    useCase.flow.forEach((step, idx) => {
-      const target = step.target?.trim() || participants.find((name) => name !== step.actor) || step.actor;
-      const baseY = rowTop + idx * stepGap * 2;
-      drawEdge(step.actor, target, step.action, baseY, false);
-      if (step.result) {
-        drawEdge(target, step.actor, step.result, baseY + stepGap, true);
-      }
+    edges.forEach((edge, idx) => {
+      const baseY = rowTop + idx * stepGap;
+      drawEdge(edge.from, edge.to, edge.label, baseY, edge.dashed);
     });
 
     await pptx.writeFile({ fileName: `${slug}.pptx` });
